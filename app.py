@@ -27,14 +27,17 @@ def find_cccd_column(columns):
             return col
     return None
 
-# --- HÀM ĐỌC FILE ĐƯỢC CACHE ĐỂ TĂNG TỐC ---
+# --- HÀM ĐỌC FILE LINH HOẠT (Tự động nhận diện xls, xlsx, csv) ---
 @st.cache_data
 def load_and_process_master(uploaded_file):
     start_time = time.time()
-    if uploaded_file.name.endswith('.csv'):
+    filename = uploaded_file.name.lower()
+    
+    if filename.endswith('.csv'):
         df = pd.read_csv(uploaded_file, dtype=str)
     else:
-        df = pd.read_excel(uploaded_file, dtype=str, engine='openpyxl')
+        # Pandas tự động chọn engine phù hợp (.xlsx hoặc .xls) mà không báo lỗi
+        df = pd.read_excel(uploaded_file, dtype=str)
     
     df = clean_columns(df)
     cccd_col = find_cccd_column(df.columns)
@@ -47,10 +50,11 @@ def load_and_process_master(uploaded_file):
 
 @st.cache_data
 def load_search_file(uploaded_file):
-    if uploaded_file.name.endswith('.csv'):
+    filename = uploaded_file.name.lower()
+    if filename.endswith('.csv'):
         df = pd.read_csv(uploaded_file, dtype=str)
     else:
-        df = pd.read_excel(uploaded_file, dtype=str, engine='openpyxl')
+        df = pd.read_excel(uploaded_file, dtype=str)
     return clean_columns(df)
 
 # --- UPLOAD FILE ---
@@ -118,9 +122,9 @@ if uploaded_master is not None and uploaded_search is not None:
                                 new_row = {}
                                 for k, v in row_data.items():
                                     if k in input_columns:
-                                        new_row[f"{k}_Dữ_Liệu_Gốc"] = str(v) if v is not None else ""
+                                        new_row[f"{k}_Dữ_Liệu_Gốc"] = str(v) if v is not None and str(v) != "nan" else ""
                                     else:
-                                        new_row[k] = str(v) if v is not None else ""
+                                        new_row[k] = str(v) if v is not None and str(v) != "nan" else ""
                                 new_row['Trạng_Thái_Kết_Quả'] = "Có trong hệ thống"
                                 results_list.append(new_row)
                             else:
@@ -144,18 +148,17 @@ if uploaded_master is not None and uploaded_search is not None:
                         
                         output_filename = "Ket_Qua_Doi_Chieu_Sieu_Toc.xlsx"
                         
-                        # Sử dụng openpyxl để ép định dạng text (@) cho các cột chứa CCCD/Định danh
+                        # Xuất file kết quả và khóa định dạng Text (@) để giữ nguyên số 0 ở đầu
                         with pd.ExcelWriter(output_filename, engine='openpyxl') as writer:
                             df_result.to_excel(writer, index=False, sheet_name='KetQua')
                             worksheet = writer.sheets['KetQua']
                             
-                            # Quét qua các cột, nếu tên cột chứa từ khóa cccd/định danh thì set định dạng Text cho toàn bộ cell
                             for col_idx, col_name in enumerate(df_result.columns, 1):
                                 col_name_lower = str(col_name).lower()
                                 if 'cccd' in col_name_lower or 'định danh' in col_name_lower or 'dinh danh' in col_name_lower or 'cmnd' in col_name_lower:
                                     for row_idx in range(2, len(df_result) + 2):
                                         cell = worksheet.cell(row=row_idx, column=col_idx)
-                                        cell.number_format = '@' # Ép kiểu Text để không bị mất số 0
+                                        cell.number_format = '@'
                         
                         with open(output_filename, "rb") as f:
                             st.download_button(
