@@ -1,23 +1,22 @@
 import streamlit as st
 import pandas as pd
+import time
 
 # --- CẤU HÌNH GIAO DIỆN ---
 st.set_page_config(
-    page_title="Tra Cứu & Đối Chiếu Dữ Liệu Theo CCCD",
-    page_icon="🔍",
+    page_title="Hệ Thống Tra Cứu Tốc Độ Cao",
+    page_icon="⚡",
     layout="wide"
 )
 
-st.title("🔍 Hệ Thống Tra Cứu & Đối Chiếu Theo CCCD")
-st.markdown("Upload file dữ liệu gốc và file cần tra cứu. Hệ thống sẽ **tự động ưu tiên nhận diện cột CCCD** để xử lý chính xác và giữ nguyên số `0` ở đầu.")
+st.title("⚡ Hệ Thống Tra Cứu & Đối Chiếu Dữ Liệu Tốc Độ Cao")
+st.markdown("Hệ thống đã được tối ưu hóa thuật toán tra cứu bằng **Dictionary Indexing** giúp xử lý hàng trăm nghìn dòng tức thì.")
 
 def clean_columns(df):
-    """Chuẩn hóa tên cột"""
     df.columns = df.columns.astype(str).str.strip()
     return df
 
 def find_cccd_column(columns):
-    """Tự động tìm cột CCCD/Căn cước ưu tiên cao nhất"""
     for col in columns:
         col_lower = col.lower().strip()
         if col_lower in ['cccd', 'số cccd', 'căn cước công dân', 'so cccd', 'can cuoc cong dan', 'cmnd', 'số cmnd', 'so cmnd']:
@@ -28,114 +27,122 @@ def find_cccd_column(columns):
             return col
     return None
 
-# --- KHU VỰC UPLOAD FILE ---
+# --- HÀM ĐỌC FILE ĐƯỢC CACHE ĐỂ TĂNG TỐC ---
+@st.cache_data
+def load_and_process_master(uploaded_file):
+    start_time = time.time()
+    if uploaded_file.name.endswith('.csv'):
+        df = pd.read_csv(uploaded_file, dtype=str)
+    else:
+        df = pd.read_excel(uploaded_file, dtype=str)
+    
+    df = clean_columns(df)
+    cccd_col = find_cccd_column(df.columns)
+    
+    if cccd_col:
+        df[cccd_col] = df[cccd_col].str.strip()
+        # Lọc trùng loại bỏ bớt dữ liệu thừa
+        df = df.drop_duplicates(subset=[cccd_col], keep='last')
+        
+    return df, cccd_col, time.time() - start_time
+
+@st.cache_data
+def load_search_file(uploaded_file):
+    if uploaded_file.name.endswith('.csv'):
+        df = pd.read_csv(uploaded_file, dtype=str)
+    else:
+        df = pd.read_excel(uploaded_file, dtype=str)
+    return clean_columns(df)
+
+# --- UPLOAD FILE ---
 st.markdown("---")
 col_up1, col_up2 = st.columns(2)
 
 with col_up1:
-    st.subheader("1️⃣ File Dữ Liệu Gốc")
-    uploaded_master = st.file_uploader("Chọn file nguồn (Excel/CSV)", type=["xlsx", "xls", "csv"], key="master")
+    uploaded_master = st.file_uploader("1️⃣ Chọn file Dữ Liệu Gốc (Excel/CSV)", type=["xlsx", "xls", "csv"], key="master")
 
 with col_up2:
-    st.subheader("2️⃣ File Cần Tìm Kiếm / Đối Chiếu")
-    uploaded_search = st.file_uploader("Chọn file danh sách tra cứu (Excel/CSV)", type=["xlsx", "xls", "csv"], key="search")
+    uploaded_search = st.file_uploader("2️⃣ Chọn file Cần Tra Cứu / Đối Chiếu", type=["xlsx", "xls", "csv"], key="search")
 
-# --- XỬ LÝ DỮ LIỆU KHI ĐÃ CÓ ĐỦ 2 FILE ---
 if uploaded_master is not None and uploaded_search is not None:
     try:
-        # Đọc file gốc (ép kiểu chuỗi để giữ nguyên số 0 đầu)
-        if uploaded_master.name.endswith('.csv'):
-            df_master = pd.read_csv(uploaded_master, dtype=str)
-        else:
-            df_master = pd.read_excel(uploaded_master, dtype=str)
-        
-        df_master = clean_columns(df_master)
-        
-        # Đọc file cần tìm kiếm
-        if uploaded_search.name.endswith('.csv'):
-            df_input = pd.read_csv(uploaded_search, dtype=str)
-        else:
-            df_input = pd.read_excel(uploaded_search, dtype=str)
-            
-        df_input = clean_columns(df_input)
-        
-        # Tự động tìm cột CCCD trong file gốc
-        master_cccd_col = find_cccd_column(df_master.columns)
+        # Load dữ liệu với cache
+        df_master, master_cccd_col, load_time = load_and_process_master(uploaded_master)
+        df_input = load_search_file(uploaded_search)
         
         if not master_cccd_col:
-            st.error("❌ Không tìm thấy cột CCCD/Căn cước trong file dữ liệu gốc! Vui lòng kiểm tra lại tên cột trong file.")
+            st.error("❌ Không tìm thấy cột CCCD/Căn cước trong file dữ liệu gốc!")
         else:
-            # Chuẩn hóa chuỗi CCCD file gốc và lọc trùng tự động
-            df_master[master_cccd_col] = df_master[master_cccd_col].str.strip()
-            df_master = df_master.drop_duplicates(subset=[master_cccd_col], keep='last')
+            st.success(f"⚡ Đã tải xong dữ liệu gốc trong **{load_time:.2f} giây** | Tổng bản ghi: **{len(df_master):,}**")
             
-            st.success(f"✅ Đã tải dữ liệu gốc thành công! Nhận diện cột CCCD chính: **[{master_cccd_col}]** | Tổng số bản ghi duy nhất: **{len(df_master):,}**")
-            
-            # --- CÁC TAB CHỨC NĂNG ---
-            tab1, tab2 = st.tabs(["🔎 Tra Cứu Thủ Công", "📁 Đối Chiếu Hàng Loạt Theo File"])
+            tab1, tab2 = st.tabs(["🔎 Tra Cứu Thủ Công", "📁 Đối Chiếu Hàng Loạt Tốc Độ Cao"])
             
             # --- TAB 1: TRA CỨU THỦ CÔNG ---
             with tab1:
-                st.subheader("Tra cứu thông tin thủ công theo số CCCD")
-                search_cccd = st.text_input("Nhập số CCCD cần tra cứu:", placeholder="Ví dụ: 03809xxxxxxx").strip()
+                st.subheader("Tra cứu thông tin thủ công")
+                search_cccd = st.text_input("Nhập số CCCD:", placeholder="Ví dụ: 03809xxxxxxx").strip()
                 
                 if st.button("Tìm Kiếm", type="primary"):
                     if not search_cccd:
                         st.warning("⚠️ Vui lòng nhập số CCCD!")
                     else:
+                        # Tối ưu tra cứu bằng bộ lọc nhanh của pandas
                         result = df_master[df_master[master_cccd_col] == search_cccd]
                         if not result.empty:
                             st.success(f"✅ Tìm thấy thông tin cho CCCD: **{search_cccd}**")
                             st.dataframe(result, use_container_width=True)
                         else:
-                            st.error(f"❌ Không có kết quả tra cứu cho số CCCD: **{search_cccd}** trong hệ thống dữ liệu gốc!")
+                            st.error(f"❌ Không có kết quả tra cứu cho số CCCD: **{search_cccd}**")
 
-            # --- TAB 2: ĐỐI CHIẾU HÀNG LOẠT ---
+            # --- TAB 2: ĐỐI CHIẾU HÀNG LOẠT (TỐC ĐỘ CAO DỰA TRÊN DICTIONARY) ---
             with tab2:
-                st.subheader("Đối chiếu danh sách tự động theo cột CCCD")
+                st.subheader("Đối chiếu danh sách tự động (Siêu tốc)")
                 
-                with st.expander("👁️ Xem trước 5 dòng đầu của file cần tra cứu", expanded=False):
-                    st.dataframe(df_input.head(), use_container_width=True)
-                
-                # Tự động tìm cột CCCD ở file upload
                 input_cccd_col = find_cccd_column(df_input.columns)
-                
                 if input_cccd_col:
-                    st.info(f"💡 Hệ thống đã **tự động chọn** cột **[{input_cccd_col}]** từ file upload để đối chiếu với cột **[{master_cccd_col}]** của file gốc.")
                     match_col_input = input_cccd_col
+                    st.info(f"💡 Đã tự động chọn cột **[{input_cccd_col}]** để đối chiếu.")
                 else:
-                    st.warning("⚠️ Không tự động nhận diện được cột CCCD trong file upload. Vui lòng chọn thủ công bên dưới:")
-                    match_col_input = st.selectbox("Chọn cột chứa CCCD trong File Tra Cứu:", list(df_input.columns))
+                    match_col_input = st.selectbox("Chọn cột CCCD trong File Tra Cứu:", list(df_input.columns))
                 
-                if st.button("🚀 Tiến Hành Đối Chiếu Theo CCCD", type="primary"):
-                    with st.spinner("Đang đối chiếu dữ liệu..."):
-                        # Chuẩn hóa khóa so sánh
-                        df_input['_Key_Temp'] = df_input[match_col_input].astype(str).str.strip()
-                        df_master_copy = df_master.copy()
-                        df_master_copy['_Key_Temp'] = df_master_copy[master_cccd_col].astype(str).str.strip()
+                if st.button("🚀 Chạy Đối Chiếu Siêu Tốc", type="primary"):
+                    with st.spinner("Đang xử lý đối chiếu tốc độ cao..."):
+                        t_start = time.time()
                         
-                        # Merge dữ liệu dựa theo cột CCCD, giữ nguyên cấu trúc file input
-                        df_result = pd.merge(
-                            df_input,
-                            df_master_copy,
-                            on='_Key_Temp',
-                            how='left',
-                            suffixes=('', '_Gốc')
-                        )
+                        # TẠO DICTIONARY INDEX CHO TOÀN BỘ FILE GỐC ĐỂ TRA CỨU O(1)
+                        # Chuyển DataFrame gốc thành dict với key là CCCD, value là toàn bộSeries dòng đó
+                        master_dict = df_master.set_index(master_cccd_col).to_dict('index')
                         
-                        # Xóa cột tạm
-                        df_result = df_result.drop(columns=['_Key_Temp'])
+                        # Xử lý đối chiếu cho từng dòng của file input
+                        results_list = []
+                        input_cccd_series = df_input[match_col_input].astype(str).str.strip()
                         
-                        # Đánh dấu trạng thái kết quả theo yêu cầu mới
-                        df_result["Trạng_Thái_Kết_Quả"] = df_result[master_cccd_col].apply(
-                            lambda x: "Có trong hệ thống" if pd.notnull(x) and str(x).strip() != "" and str(x).strip() != "nan" else "Không có kết quả tra cứu"
-                        )
+                        master_columns = list(df_master.columns)
                         
-                        st.success("✅ Đối chiếu thành công!")
-                        st.dataframe(df_result, use_container_width=True)
+                        for val in input_cccd_series:
+                            if val in master_dict:
+                                # Lấy thông tin từ file gốc gộp vào
+                                row_data = master_dict[val].copy()
+                                row_data['Trạng_Thái_Kết_Quả'] = "Có trong hệ thống"
+                                results_list.append(row_data)
+                            else:
+                                row_data = {col: "" for col in master_columns if col != master_cccd_col}
+                                row_data[master_cccd_col] = val
+                                row_data['Trạng_Thái_Kết_Quả'] = "Không có kết quả tra cứu"
+                                results_list.append(row_data)
+                                
+                        # Tạo DataFrame kết quả kết hợp từ file input và thông tin tìm được
+                        df_matched_info = pd.DataFrame(results_list)
                         
-                        # Xuất file Excel kết quả
-                        output_filename = "Ket_Qua_Doi_Chieu_CCCD.xlsx"
+                        # Ghép nối lại với file input ban đầu để giữ nguyên 100% cấu trúc cột của file input
+                        df_result = pd.concat([df_input.reset_index(drop=True), df_matched_info.drop(columns=[master_cccd_col], errors='ignore')], axis=1)
+                        
+                        t_end = time.time()
+                        
+                        st.success(f"✅ Hoàn thành đối chiếu trong vòng **{t_end - t_start:.2f} giây**!")
+                        st.dataframe(df_result.head(100), use_container_width=True) # Hiển thị 100 dòng đầu cho mượt giao diện
+                        
+                        output_filename = "Ket_Qua_Doi_Chieu_Sieu_Toc.xlsx"
                         df_result.to_excel(output_filename, index=False)
                         
                         with open(output_filename, "rb") as f:
@@ -146,8 +153,7 @@ if uploaded_master is not None and uploaded_search is not None:
                                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                                 type="primary"
                             )
-                            
     except Exception as e:
-        st.error(f"Lỗi khi đọc hoặc xử lý file: {e}")
+        st.error(f"Lỗi khi xử lý file: {e}")
 else:
-    st.info("💡 Vui lòng upload đầy đủ **File Dữ Liệu Gốc** và **File Cần Tìm Kiếm** ở phía trên để bắt đầu sử dụng.")
+    st.info("💡 Vui lòng upload đầy đủ file gốc và file tra cứu ở trên để bắt đầu.")
