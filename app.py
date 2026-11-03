@@ -10,7 +10,7 @@ st.set_page_config(
 )
 
 st.title("⚡ Hệ Thống Tra Cứu & Đối Chiếu Dữ Liệu Tốc Độ Cao")
-st.markdown("Hệ thống đã được tối ưu hóa thuật toán tra cứu bằng **Dictionary Indexing** giúp xử lý hàng trăm nghìn dòng tức thì.")
+st.markdown("Hệ thống tối ưu hóa thuật toán **Dictionary Indexing** giúp xử lý hàng trăm nghìn dòng tức thì, chống lỗi trùng tên cột.")
 
 def clean_columns(df):
     df.columns = df.columns.astype(str).str.strip()
@@ -41,7 +41,6 @@ def load_and_process_master(uploaded_file):
     
     if cccd_col:
         df[cccd_col] = df[cccd_col].str.strip()
-        # Lọc trùng loại bỏ bớt dữ liệu thừa
         df = df.drop_duplicates(subset=[cccd_col], keep='last')
         
     return df, cccd_col, time.time() - start_time
@@ -66,7 +65,6 @@ with col_up2:
 
 if uploaded_master is not None and uploaded_search is not None:
     try:
-        # Load dữ liệu với cache
         df_master, master_cccd_col, load_time = load_and_process_master(uploaded_master)
         df_input = load_search_file(uploaded_search)
         
@@ -86,7 +84,6 @@ if uploaded_master is not None and uploaded_search is not None:
                     if not search_cccd:
                         st.warning("⚠️ Vui lòng nhập số CCCD!")
                     else:
-                        # Tối ưu tra cứu bằng bộ lọc nhanh của pandas
                         result = df_master[df_master[master_cccd_col] == search_cccd]
                         if not result.empty:
                             st.success(f"✅ Tìm thấy thông tin cho CCCD: **{search_cccd}**")
@@ -94,7 +91,7 @@ if uploaded_master is not None and uploaded_search is not None:
                         else:
                             st.error(f"❌ Không có kết quả tra cứu cho số CCCD: **{search_cccd}**")
 
-            # --- TAB 2: ĐỐI CHIẾU HÀNG LOẠT (TỐC ĐỘ CAO DỰA TRÊN DICTIONARY) ---
+            # --- TAB 2: ĐỐI CHIẾU HÀNG LOẠT ---
             with tab2:
                 st.subheader("Đối chiếu danh sách tự động (Siêu tốc)")
                 
@@ -109,51 +106,47 @@ if uploaded_master is not None and uploaded_search is not None:
                     with st.spinner("Đang xử lý đối chiếu tốc độ cao..."):
                         t_start = time.time()
                         
-                        # TẠO DICTIONARY INDEX CHO TOÀN BỘ FILE GỐC ĐỂ TRA CỨU O(1)
-                        # Chuyển DataFrame gốc thành dict với key là CCCD, value là toàn bộSeries dòng đó
+                        # Chuyển DataFrame gốc thành Dictionary (Bỏ index CCCD để tránh lặp)
                         master_dict = df_master.set_index(master_cccd_col).to_dict('index')
                         
-                        # Xử lý đối chiếu cho từng dòng của file input
                         results_list = []
                         input_cccd_series = df_input[match_col_input].astype(str).str.strip()
                         
-                        master_columns = list(df_master.columns)
+                        # Lấy danh sách tên cột để kiểm tra trùng lặp
+                        input_columns = set(df_input.columns)
                         
                         for val in input_cccd_series:
                             if val in master_dict:
-                                # Lấy thông tin từ file gốc gộp vào
-                                row_data = master_dict[val].copy()
-                                row_data['Trạng_Thái_Kết_Quả'] = "Có trong hệ thống"
-                                results_list.append(row_data)
+                                row_data = master_dict[val]
+                                new_row = {}
+                                # Kiểm tra và thêm hậu tố _Dữ_Liệu_Gốc nếu trùng tên cột
+                                for k, v in row_data.items():
+                                    if k in input_columns:
+                                        new_row[f"{k}_Dữ_Liệu_Gốc"] = v
+                                    else:
+                                        new_row[k] = v
+                                new_row['Trạng_Thái_Kết_Quả'] = "Có trong hệ thống"
+                                results_list.append(new_row)
                             else:
-                                row_data = {col: "" for col in master_columns if col != master_cccd_col}
-                                row_data[master_cccd_col] = val
-                                row_data['Trạng_Thái_Kết_Quả'] = "Không có kết quả tra cứu"
-                                results_list.append(row_data)
+                                new_row = {}
+                                for k in df_master.columns:
+                                    if k != master_cccd_col:
+                                        if k in input_columns:
+                                            new_row[f"{k}_Dữ_Liệu_Gốc"] = ""
+                                        else:
+                                            new_row[k] = ""
+                                new_row['Trạng_Thái_Kết_Quả'] = "Không có kết quả tra cứu"
+                                results_list.append(new_row)
                                 
-                        # Tạo DataFrame kết quả kết hợp từ file input và thông tin tìm được
                         df_matched_info = pd.DataFrame(results_list)
                         
-                        # Ghép nối lại với file input ban đầu để giữ nguyên 100% cấu trúc cột của file input
-                        df_result = pd.concat([df_input.reset_index(drop=True), df_matched_info.drop(columns=[master_cccd_col], errors='ignore')], axis=1)
+                        # Ghép nối an toàn không lo lỗi Duplicate Columns
+                        df_result = pd.concat([df_input.reset_index(drop=True), df_matched_info], axis=1)
                         
                         t_end = time.time()
                         
                         st.success(f"✅ Hoàn thành đối chiếu trong vòng **{t_end - t_start:.2f} giây**!")
-                        st.dataframe(df_result.head(100), use_container_width=True) # Hiển thị 100 dòng đầu cho mượt giao diện
+                        st.dataframe(df_result.head(100), use_container_width=True) 
                         
                         output_filename = "Ket_Qua_Doi_Chieu_Sieu_Toc.xlsx"
-                        df_result.to_excel(output_filename, index=False)
-                        
-                        with open(output_filename, "rb") as f:
-                            st.download_button(
-                                label="📥 Tải Xuống File Kết Quả (Excel)",
-                                data=f,
-                                file_name=output_filename,
-                                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                                type="primary"
-                            )
-    except Exception as e:
-        st.error(f"Lỗi khi xử lý file: {e}")
-else:
-    st.info("💡 Vui lòng upload đầy đủ file gốc và file tra cứu ở trên để bắt đầu.")
+                        df_result.to_excel(output_filename, index
