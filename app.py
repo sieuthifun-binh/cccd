@@ -20,10 +20,8 @@ def find_cccd_column(columns):
     """Tự động tìm cột CCCD/Căn cước ưu tiên cao nhất"""
     for col in columns:
         col_lower = col.lower().strip()
-        # Ưu tiên các từ khóa chính xác liên quan đến CCCD
         if col_lower in ['cccd', 'số cccd', 'căn cước công dân', 'so cccd', 'can cuoc cong dan', 'cmnd', 'số cmnd', 'so cmnd']:
             return col
-    # Tìm kiếm tương đối nếu không khớp chính xác
     for col in columns:
         col_lower = col.lower()
         if 'cccd' in col_lower or 'căn cước' in col_lower or 'cmnd' in col_lower:
@@ -90,7 +88,7 @@ if uploaded_master is not None and uploaded_search is not None:
                             st.success(f"✅ Tìm thấy thông tin cho CCCD: **{search_cccd}**")
                             st.dataframe(result, use_container_width=True)
                         else:
-                            st.error(f"❌ **Không có** thông tin cho số CCCD: **{search_cccd}** trong hệ thống dữ liệu gốc!")
+                            st.error(f"❌ Không có kết quả tra cứu cho số CCCD: **{search_cccd}** trong hệ thống dữ liệu gốc!")
 
             # --- TAB 2: ĐỐI CHIẾU HÀNG LOẠT ---
             with tab2:
@@ -128,9 +126,9 @@ if uploaded_master is not None and uploaded_search is not None:
                         # Xóa cột tạm
                         df_result = df_result.drop(columns=['_Key_Temp'])
                         
-                        # Đánh dấu trạng thái kết quả
+                        # Đánh dấu trạng thái kết quả theo yêu cầu mới
                         df_result["Trạng_Thái_Kết_Quả"] = df_result[master_cccd_col].apply(
-                            lambda x: "Có trong hệ thống" if pd.notnull(x) and str(x).strip() != "" and str(x).strip() != "nan" else "Không có trong hệ thống"
+                            lambda x: "Có trong hệ thống" if pd.notnull(x) and str(x).strip() != "" and str(x).strip() != "nan" else "Không có kết quả tra cứu"
                         )
                         
                         st.success("✅ Đối chiếu thành công!")
