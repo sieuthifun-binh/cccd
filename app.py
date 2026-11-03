@@ -149,4 +149,17 @@ if uploaded_master is not None and uploaded_search is not None:
                         st.dataframe(df_result.head(100), use_container_width=True) 
                         
                         output_filename = "Ket_Qua_Doi_Chieu_Sieu_Toc.xlsx"
-                        df_result.to_excel(output_filename, index
+                        df_result.to_excel(output_filename, index=False)
+                        
+                        with open(output_filename, "rb") as f:
+                            st.download_button(
+                                label="📥 Tải Xuống File Kết Quả (Excel)",
+                                data=f,
+                                file_name=output_filename,
+                                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                                type="primary"
+                            )
+    except Exception as e:
+        st.error(f"Lỗi khi xử lý file: {e}")
+else:
+    st.info("💡 Vui lòng upload đầy đủ file gốc và file tra cứu ở trên để bắt đầu.")
