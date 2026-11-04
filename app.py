@@ -51,15 +51,17 @@ def decode_cccd_info(cccd_str):
     }
     
     p_code = cccd_str[0:2]
-province_name = province_dict.get(p_code, "Tỉnh/Thành khác")
+    province_name = province_dict.get(p_code, "Tỉnh/Thành khác")
     
     # Giới tính & Thế kỷ (ký tự thứ 3)
     g_code = int(cccd_str[2])
-    gender_map = {0: ("Nam", "20xx"), 1: ("Nữ", "20xx"), 
-                  2: ("Nam", "21xx"), 3: ("Nữ", "21xx"),
-                  4: ("Nam", "22xx"), 5: ("Nữ", "22xx"),
-                  6: ("Nam", "23xx"), 7: ("Nữ", "23xx"),
-                  8: ("Nam", "24xx"), 9: ("Nữ", "24xx")}
+    gender_map = {
+        0: ("Nam", "20xx"), 1: ("Nữ", "20xx"), 
+        2: ("Nam", "21xx"), 3: ("Nữ", "21xx"),
+        4: ("Nam", "22xx"), 5: ("Nữ", "22xx"),
+        6: ("Nam", "23xx"), 7: ("Nữ", "23xx"),
+        8: ("Nam", "24xx"), 9: ("Nữ", "24xx")
+    }
     gender, century = gender_map.get(g_code, ("Không rõ", "Không rõ"))
     
     birth_two = cccd_str[3:5]
@@ -120,10 +122,12 @@ if st.session_state.df_master is not None:
                             
                             # Giải mã thông tin thông minh từ CCCD
                             prov, gend, dob = decode_cccd_info(search_cccd)
-                            st.info(🔮 **Phân tích thông tin định danh tự động từ số CCCD:**\n"
-                                    f"- **Nơi đăng ký khai sinh / Quê quán:** {prov}\n"
-                                    f"- **Giới tính dự kiến:** {gend}\n"
-                                    f"- **Thế kỷ / Thập kỷ sinh:** {dob}")
+                            st.info(
+                                f"🔮 **Phân tích thông tin định danh tự động từ số CCCD:**\n\n"
+                                f"- **Nơi đăng ký khai sinh / Quê quán:** {prov}\n"
+                                f"- **Giới tính dự kiến:** {gend}\n"
+                                f"- **Thế kỷ / Thập kỷ sinh:** {dob}"
+                            )
                         else:
                             st.error(f"❌ Không tìm thấy chính xác số: **{search_cccd}**")
                             
